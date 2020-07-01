@@ -3,6 +3,7 @@ library(quanteda)
 library(ggplot2)
 library(ngram)
 library(data.table)
+library(feather)
 
 #Create paths
 blogs_path   <- "./final/en_US/en_US.blogs.txt"
