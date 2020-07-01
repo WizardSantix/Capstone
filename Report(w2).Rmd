@@ -1,0 +1,205 @@
+---
+title: "Coursera Week 2 Milestone report"
+author: "Santiago Correa"
+date: "7 de junio de 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This report was written as part of the capstone project of the Johns Hopkins data science specialization in Coursera. The project's objective is to create a predictive text shiny application by using Natural Language Processing techniques. The objective of this report is to display an exploratory analysis of the provided data and get some insight for creating the prediction algorithm. The quanteda package was used to create the corpus and provide summary statistics, while base R package was used to perform a basic analysis of the data and subsetting.
+
+## Set the R environment
+```{r message=FALSE}
+library(ngram)
+library(dplyr)
+library(quanteda)
+library(ggplot2)
+```
+
+# Analysis of the files provided in the Dataset
+The dataset contains corpora from twitter, news and blogs, in several languages, for analysis purposes, the American English (en_US) information was selected.
+
+```{r}
+blogs_path   <- "./final/en_US/en_US.blogs.txt"
+news_path    <- "./final/en_US/en_US.news.txt"
+twitter_path <- "./final/en_US/en_US.twitter.txt" 
+```
+
+The data was then scanned to measure the size of each file in MB, the number of lines words, and characters and, the distribution of characters per line in each file. It can be noted that the majority of characters is on the blogs file, most of the lines come from the twitter file and, most of the words come from the blogs file. This suggests that the twitter dataset contains a higher amount of short lines while the blogs file contains a lower amount of longer strings. For the news file, it can be noted that it has more words per line than the twitter file.
+
+```{r include=FALSE}
+#Size of the files (Mb)
+size_blogs   <- file.size(blogs_path) / (2^20)
+size_news    <- file.size(news_path) / (2^20)
+size_twitter <- file.size(twitter_path) / (2^20)
+
+#Get data from the files
+blogs   <- readLines(blogs_path, skipNul = TRUE)
+news    <- readLines(news_path,  skipNul = TRUE)
+twitter <- readLines(twitter_path, skipNul = TRUE)
+
+#Number of lines per file
+lines_blogs   <- length(blogs)
+lines_news    <- length(news)
+lines_twitter <- length(twitter)
+lines_total   <- lines_blogs + lines_news + lines_twitter
+
+#Number of characters per line
+nchar_blogs   <- nchar(blogs)
+nchar_news    <- nchar(news)
+nchar_twitter <- nchar(twitter)
+
+#Total characters
+totalchar_blogs   <- sum(nchar_blogs)
+totalchar_news   <- sum(nchar_news)
+totalchar_twitter <- sum(nchar_twitter)
+
+#Word count per file
+wordcount_blogs <- wordcount(blogs, sep = " ")
+wordcount_news  <- wordcount(news,  sep = " ")
+wordcount_twitter <- wordcount(twitter, sep = " ")
+```
+
+```{r warning=FALSE}
+#Summary
+summary <- data.frame(f_names = c("blogs", "news", "twitter"),
+                           f_size  = c(size_blogs, size_news, size_twitter),
+                           f_lines = c(lines_blogs, lines_news, lines_twitter),
+                           n_char =  c(totalchar_blogs, totalchar_news, totalchar_twitter),
+                           n_words = c(wordcount_blogs, wordcount_news, wordcount_twitter))
+summary <- summary %>% mutate(avg_words_line = round(n_words/f_lines))
+summary <- summary %>% mutate(pct_char = round(n_char/sum(n_char), 2))
+summary <- summary %>% mutate(pct_lines = round(f_lines/sum(f_lines), 2))
+summary <- summary %>% mutate(pct_words = round(n_words/sum(n_words), 2))
+summary
+```
+
+## Corpus and analysis of words (tokens) and groups of words (n-grams)
+
+To guarantee the presence of the specific data that each file could provide, a sample of 20% of the lines in each file was taken and combined into a single dataset to be worked with. Lines were selected for sampling in order to preserve the context of the different words that are contained within each line.
+
+```{r warning=FALSE}
+#Sampling and Tidying
+set.seed(666)
+samp_pct<-0.2
+
+#Convert data to dataframes to use dplyr
+blogs   <- data_frame(text = blogs)
+news    <- data_frame(text = news)
+twitter <- data_frame(text = twitter)
+
+#Randomly sample 20% of the data
+blogs_sample<-sample_n(blogs,lines_blogs*samp_pct)
+blogs_sample<-blogs_sample %>% mutate(file="blogs")
+news_sample<-sample_n(news,lines_news*samp_pct)
+news_sample<-news_sample %>% mutate(file="news")
+twitter_sample<-sample_n(twitter,lines_twitter*samp_pct)
+twitter_sample<-twitter_sample %>% mutate(file="twitter")
+
+#Create a combined tidy dataset
+sampledata<- rbind(blogs_sample,news_sample,twitter_sample)
+```
+
+The corpus was then created using quanteda package in the sample dataset, then, it was tokenized and tydied.
+
+- Numbers were removed
+- Punctuation was removed
+- Symbols were removed
+- Words separated by hyphens were preserved as a whole word.
+- All tokens were set to lower case
+- Words starting or ending with anything different to the letters from A to Z were removed.
+- One letter words were removed
+- Profanity was filtered
+
+```{r warning=FALSE}
+#Create Corpus with quanteda
+samplecorpus<-corpus(sampledata,text_field="text")
+
+#Tokenize the corpus
+Tokens <- tokens(samplecorpus, remove_numbers=TRUE, remove_punct=TRUE, remove_symbols=TRUE, split_hyphens=FALSE)
+Tokens <- tokens_tolower(Tokens)
+
+#Remove words that start or end with a non a-z character, and single character words.
+Tokens <- tokens_remove(Tokens, pattern="^[^a-zA-Z]|[^a-zA-Z]$", valuetype="regex", padding=TRUE)
+Tokens <- tokens_remove(Tokens, pattern="\\b[a-zA-Z]\\b", valuetype="regex")
+
+#Remove bad words 
+badwords <- readLines("./final/en_US/badwords.txt")
+Tokens <- tokens_remove(Tokens, badwords, padding = TRUE)
+```
+
+Quanteda's dfm function was used to summarize the information of the corpus, showing how much each token appears in each line of the dataset, then, the wordcloud function was used to illustrate the tokens (words) with the highest frequency.
+
+```{r warning=FALSE}
+#Create feature matrix for tokens
+sampledfm <- dfm(Tokens, remove=stopwords("english"))
+
+#Create wordcloud of most common Tokens
+textplot_wordcloud(sampledfm,max_words = 100, min_size = 1, max_size=30,color = rev(RColorBrewer::brewer.pal(10, "Spectral")))
+```
+
+Finally, the 2-grams, 3-grams and 4-grams were read using the tokens_ngrams() function, then a similar procedure was followed to illustrate the most frequent groups of words.
+
+```{r warning=FALSE}
+#Analyze n-grams of 2, 3 and 4 tokens
+bigram <- tokens_ngrams(Tokens, n = 2, concatenator = " ")
+trigram <- tokens_ngrams(Tokens, n = 3, concatenator = " ")
+fourgram <- tokens_ngrams(Tokens, n=4, concatenator = " ")
+
+#Create feature matrix for the n-grams
+bigramdfm <- dfm(bigram, verbose = FALSE)
+trigramdfm <- dfm(trigram, verbose = FALSE)
+fourgramdfm <- dfm(fourgram, verbose=FALSE)
+
+#Extract 2-grams, 3-grams and 4-grams top features
+top_bigram<- topfeatures(bigramdfm, 15)
+top_trigram<- topfeatures(trigramdfm, 15)
+top_fourgram<- topfeatures(fourgramdfm,15)
+
+#Convert to DF to be plotted and add the cumulative sum
+top_bigram<- data.frame(bigram=names(top_bigram),frequency=top_bigram)
+top_trigram<- data.frame(trigram=names(top_trigram),frequency=top_trigram)
+top_fourgram<- data.frame(fourgram=names(top_fourgram),frequency=top_fourgram)
+
+#Plot top 2, 3 and 4=grams
+#2-grams plot
+top_bigram_plot <- ggplot(data = top_bigram, aes(x = factor(bigram, levels = bigram), y = frequency, fill = frequency)) + 
+  geom_bar(stat = "identity", position = position_dodge()) +
+  labs(x = "Bigrams", y = "Frequency") +
+  labs(title = "Frequency of Bigrams in the sample") +
+  coord_flip() +
+  guides(fill=FALSE) 
+
+#3-grams plot
+top_trigram_plot <- ggplot(data = top_trigram, aes(x = factor(trigram, levels = trigram), y = frequency, fill = frequency)) + 
+  geom_bar(stat = "identity", position = position_dodge()) +
+  labs(x = "Trigrams", y = "Frequency") +
+  labs(title = "Frequency of Trigrams in the sample") +
+  coord_flip() +
+  guides(fill=FALSE) 
+
+#4-grams plot
+top_fourgram_plot <- ggplot(data = top_fourgram, aes(x = factor(fourgram, levels = fourgram), y = frequency, fill = frequency)) + 
+  geom_bar(stat = "identity", position = position_dodge()) +
+  labs(x = "4-grams", y = "Frequency") +
+  labs(title = "Frequency of 4-grams in the sample") +
+  coord_flip() +
+  guides(fill=FALSE) 
+top_bigram_plot
+top_trigram_plot
+top_fourgram_plot
+```
+
+As it can be seen, groups of words up to 4 are very commonly used sentences that can be followed by several words, this suggests 2 things: 1) the algorithm will have to include a probability based approach. 2) higher level n-grams will probably be required in order to train the model to a usable point.
+
+## Plans for creating the prediction algorithm.
+
+1) Generate higher level n-grams (7~8) words
+2) Use the frequency of the ngrams to train a model based on an aggregated probability approach such as Markov's, or Katz's back off models.
+3) Use the trained model to predict the word with the highest probability of being next.
+4) Include the models in a Shiny App, which will receive a string of text through a text input, the app will then show the word with the highest likelyhood of being next.
