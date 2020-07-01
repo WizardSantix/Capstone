@@ -113,3 +113,8 @@ write_feather(unigram_table,file="./unigram.feather")
 write_feather(bigram_table,file="./bigram.feather")
 write_feather(trigram_table,file="./trigram.feather")
 write_feather(fourgram_table,file="./fourgram.feather")
+
+write_feather(unigram_table,file="./Word_predictor/unigram.feather")
+write_feather(bigram_table,file="./Word_predictor/bigram.feather")
+write_feather(trigram_table,file="./Word_predictor/trigram.feather")
+write_feather(fourgram_table,file="./Word_predictor/fourgram.feather")
